@@ -1,0 +1,2083 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#050914" />
+  <title>太阳位置数字化记录器 v04</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f2e8;
+      --ink: #1d2430;
+      --muted: #6f7685;
+      --line: rgba(30, 36, 48, .13);
+      --card: rgba(255, 255, 255, .86);
+      --glass: rgba(255, 255, 255, .72);
+      --dark: #060914;
+      --blue: #2d72ff;
+      --green: #15835a;
+      --orange: #ff9f1c;
+      --red: #d33c3c;
+      --dockH: 92px;
+      --safeB: env(safe-area-inset-bottom, 0px);
+      --safeT: env(safe-area-inset-top, 0px);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top, #fff3bd 0, #f7f2e8 36%, #ece6d8 100%);
+    }
+
+    button, input, textarea { font: inherit; }
+    button {
+      border: none;
+      cursor: pointer;
+      border-radius: 999px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .app {
+      height: 100dvh;
+      width: 100vw;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: calc(16px + var(--safeT)) 16px calc(var(--dockH) + var(--safeB) + 28px);
+    }
+    .page.active { display: block; }
+
+    .sheet {
+      max-width: 980px;
+      margin: 0 auto 16px;
+      padding: 22px;
+      border-radius: 28px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 22px rgba(31, 35, 48, .08);
+      backdrop-filter: blur(18px);
+    }
+    .sheet h2 {
+      margin: 0 0 12px;
+      font-size: clamp(26px, 5vw, 42px);
+      letter-spacing: -.03em;
+    }
+    .sheet p { color: var(--muted); font-size: 17px; line-height: 1.7; margin: 0 0 14px; }
+
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      font-weight: 800;
+      background: rgba(255,255,255,.72);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .pill.ok { color: #0b7a4a; background: #dff8ec; border-color: rgba(21,131,90,.22); }
+    .pill.warn { color: #b56b00; background: #fff0cf; border-color: rgba(255,159,28,.25); }
+    .pill.bad { color: #b91f28; background: #ffe3e6; border-color: rgba(211,60,60,.25); }
+
+    .primary {
+      background: linear-gradient(135deg, #ffd164, #ff8a1c);
+      padding: 14px 20px;
+      box-shadow: 0 12px 24px rgba(255, 144, 28, .32);
+      font-size: 18px;
+    }
+    .secondary { background: #f0f1f3; padding: 13px 18px; font-size: 17px; }
+    .danger { background: #ffe2e3; color: #ba1e28; padding: 13px 18px; font-size: 17px; }
+    .blue { background: #e5f0ff; color: #1456c8; padding: 13px 18px; font-size: 17px; }
+    .ghost { background: rgba(255,255,255,.24); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+
+    /* 进入提示 */
+    .intro {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(8, 12, 20, .58);
+      backdrop-filter: blur(18px);
+      padding: 18px;
+      padding-bottom: calc(18px + var(--safeB));
+    }
+    .intro.show { display: flex; }
+    .intro-card {
+      width: min(720px, 100%);
+      max-height: calc(100dvh - 36px - var(--safeB));
+      overflow: auto;
+      border-radius: 32px;
+      padding: 26px;
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 28px 80px rgba(0,0,0,.28);
+    }
+    .intro-card h1 {
+      margin: 0 0 8px;
+      font-size: clamp(32px, 8vw, 58px);
+      line-height: 1.05;
+      letter-spacing: -.05em;
+    }
+    .intro-card p, .intro-card li {
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 17px;
+    }
+    .intro-card ul { padding-left: 1.2em; margin: 12px 0; }
+    .form-row { display: grid; gap: 8px; margin: 12px 0; }
+    .form-row label { font-weight: 900; color: var(--muted); }
+    .input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 18px;
+      padding: 15px 16px;
+      outline: none;
+      font-size: 17px;
+    }
+    .input:focus { border-color: rgba(45,114,255,.45); box-shadow: 0 0 0 4px rgba(45,114,255,.12); }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+    /* 观测页：相机界面 */
+    #page-observe {
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    .camera-ui {
+      position: relative;
+      height: 100dvh;
+      width: 100vw;
+      overflow: hidden;
+      background: #000;
+    }
+    #cameraVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #070a11;
+    }
+    .camera-placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(255,255,255,.68);
+      background:
+        radial-gradient(circle at center, rgba(40,53,78,.65), rgba(0,0,0,1) 70%),
+        linear-gradient(160deg, #07101c, #000);
+      text-align: center;
+      padding: 30px;
+      pointer-events: none;
+    }
+    .camera-placeholder.hidden { display: none; }
+    .camera-placeholder b { display: block; color: #fff; font-size: 22px; margin-bottom: 8px; }
+    .camera-safe-shade {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(255,255,255,0) 0 16%, rgba(0,0,0,.12) 24%, rgba(0,0,0,.38) 100%);
+      pointer-events: none;
+    }
+    .target {
+      position: absolute;
+      left: 50%; top: 45%;
+      width: min(38vw, 210px);
+      height: min(38vw, 210px);
+      transform: translate(-50%, -50%);
+      border: 3px solid rgba(255,255,255,.82);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 0 22px rgba(255,255,255,.22);
+      pointer-events: none;
+    }
+    .target::before, .target::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,.85);
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 9px;
+    }
+    .target::before { width: 130%; height: 2px; }
+    .target::after { width: 2px; height: 130%; }
+    .sun-dot {
+      position: absolute;
+      left: 50%; top: 45%;
+      transform: translate(-50%, -50%);
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #ffca35;
+      box-shadow: 0 0 25px #ffca35;
+      pointer-events: none;
+    }
+    .top-camera-bar {
+      position: absolute;
+      left: 14px; right: 14px;
+      top: calc(12px + var(--safeT));
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      z-index: 4;
+    }
+    .status-stack { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .cam-pill {
+      min-height: 38px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(0,0,0,.46);
+      border: 1px solid rgba(255,255,255,.16);
+      backdrop-filter: blur(14px);
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .cam-pill.on { color: #c9ffe4; }
+    .cam-pill.warn { color: #ffe2a3; }
+    .camera-help {
+      position: absolute;
+      left: 18px; right: 18px;
+      bottom: calc(var(--dockH) + var(--safeB) + 126px);
+      z-index: 3;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .camera-help span {
+      display: inline-block;
+      max-width: min(92vw, 620px);
+      color: #fff;
+      background: rgba(0,0,0,.38);
+      backdrop-filter: blur(12px);
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 800;
+      text-align: center;
+      text-shadow: 0 1px 2px rgba(0,0,0,.35);
+    }
+    .shutter-zone {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: calc(var(--dockH) + var(--safeB) + 18px);
+      z-index: 6;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+    .shutter-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      pointer-events: auto;
+    }
+    .mini-control {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      color: #fff;
+      background: rgba(0,0,0,.42);
+      border: 1px solid rgba(255,255,255,.18);
+      backdrop-filter: blur(12px);
+      font-size: 22px;
+    }
+    .shutter {
+      width: 92px; height: 92px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.92);
+      border: 7px solid rgba(255,255,255,.38);
+      box-shadow: 0 10px 32px rgba(0,0,0,.35);
+      position: relative;
+    }
+    .shutter::after {
+      content: "记录";
+      position: absolute;
+      inset: 14px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: #111827;
+      font-size: 16px;
+      font-weight: 1000;
+    }
+    .live-readout {
+      position: absolute;
+      left: 14px; right: 14px;
+      bottom: calc(var(--dockH) + var(--safeB) + 120px);
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+      pointer-events: none;
+    }
+    .readout-main {
+      background: rgba(0,0,0,.52);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 24px;
+      padding: 14px 16px;
+      backdrop-filter: blur(18px);
+      min-height: 98px;
+      box-shadow: 0 16px 30px rgba(0,0,0,.24);
+    }
+    .readout-main .dir {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      font-size: clamp(25px, 7vw, 54px);
+      line-height: 1;
+      font-weight: 200;
+      letter-spacing: -.03em;
+    }
+    .readout-main .dir b { font-weight: 1000; }
+    .readout-main .sub {
+      margin-top: 8px;
+      color: rgba(255,255,255,.78);
+      font-size: 14px;
+      font-weight: 800;
+      min-height: 36px;
+      line-height: 1.28;
+    }
+    .alt-badge {
+      min-width: 110px;
+      background: rgba(0,0,0,.52);
+      color: #fff;
+      border-radius: 24px;
+      padding: 14px 14px 12px;
+      border: 1px solid rgba(255,255,255,.16);
+      backdrop-filter: blur(18px);
+      text-align: center;
+      min-height: 98px;
+      box-shadow: 0 16px 30px rgba(0,0,0,.24);
+    }
+    .alt-badge small { color: rgba(255,255,255,.68); font-weight: 900; }
+    .alt-badge b { display: block; font-size: clamp(28px, 7vw, 48px); line-height: 1.08; }
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.95);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 10;
+      transition: opacity .15s ease;
+    }
+    .flash.show { opacity: 1; }
+    .toast {
+      position: fixed;
+      left: 16px; right: 16px;
+      top: calc(12px + var(--safeT));
+      z-index: 1000;
+      display: none;
+      max-width: 680px;
+      margin: 0 auto;
+      border-radius: 20px;
+      background: rgba(18, 24, 36, .88);
+      color: #fff;
+      padding: 14px 16px;
+      box-shadow: 0 18px 40px rgba(0,0,0,.28);
+      backdrop-filter: blur(16px);
+      font-weight: 800;
+      line-height: 1.45;
+    }
+    .toast.show { display: block; }
+
+    /* 记录页 */
+    .record-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .records-grid { display: grid; gap: 14px; margin-top: 14px; }
+    .record-card {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 14px;
+      padding: 12px;
+      border-radius: 22px;
+      background: rgba(255,255,255,.78);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 16px rgba(31,35,48,.05);
+    }
+    .record-card img {
+      width: 112px;
+      height: 112px;
+      border-radius: 16px;
+      object-fit: cover;
+      background: #0b1120;
+    }
+    .record-title { font-size: 18px; font-weight: 1000; margin-bottom: 6px; }
+    .record-meta {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+      word-break: break-word;
+    }
+    .record-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .record-actions button, .record-actions a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      text-decoration: none;
+      background: #f0f1f3;
+      color: var(--ink);
+      font-weight: 900;
+      font-size: 13px;
+      border: none;
+    }
+    .record-actions .delete-one { background: #ffe3e6; color: #b71f2a; }
+    .close-time { color: #b56b00; font-weight: 900; }
+    .empty {
+      padding: 26px;
+      text-align: center;
+      color: var(--muted);
+      border-radius: 22px;
+      background: rgba(255,255,255,.66);
+      border: 1px dashed rgba(31,35,48,.2);
+      line-height: 1.7;
+    }
+
+    /* 模拟页 */
+    #page-sim { padding: 0; overflow: hidden; background: #07101d; }
+    .sim-ui {
+      position: relative;
+      height: 100dvh;
+      width: 100vw;
+      background: #07101d;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #simCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #07101d;
+    }
+    .sim-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+    .sim-top {
+      position: absolute;
+      left: 14px; right: 14px;
+      top: calc(12px + var(--safeT));
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .sim-title-pill {
+      background: rgba(0,0,0,.36);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.16);
+      backdrop-filter: blur(14px);
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-weight: 1000;
+      line-height: 1.28;
+    }
+    .sim-title-pill small { display: block; color: rgba(255,255,255,.68); font-weight: 800; }
+    .sim-controls {
+      position: absolute;
+      left: 14px; right: 14px;
+      bottom: calc(var(--dockH) + var(--safeB) + 18px);
+      display: grid;
+      gap: 10px;
+      pointer-events: auto;
+    }
+    .sim-panel {
+      border-radius: 22px;
+      background: rgba(0,0,0,.48);
+      border: 1px solid rgba(255,255,255,.16);
+      backdrop-filter: blur(16px);
+      color: #fff;
+      padding: 12px 14px;
+      box-shadow: 0 15px 32px rgba(0,0,0,.25);
+    }
+    .sim-panel .row { justify-content: space-between; }
+    .sim-panel button { color: var(--ink); padding: 10px 14px; background: rgba(255,255,255,.9); font-size: 14px; }
+    .sim-panel button.active { background: #ffd164; }
+    .timeline {
+      width: 100%;
+      accent-color: var(--orange);
+    }
+    .sim-info {
+      font-weight: 900;
+      line-height: 1.45;
+      color: rgba(255,255,255,.88);
+    }
+    .focus-badge {
+      display: none;
+      margin-top: 8px;
+      color: #fff2b3;
+    }
+    .focus-badge.show { display: block; }
+    .reticle-sim {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 48px; height: 48px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,.75);
+      opacity: .88;
+    }
+    .reticle-sim::before, .reticle-sim::after {
+      content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,.75);
+    }
+    .reticle-sim::before { width: 70px; height: 1px; }
+    .reticle-sim::after { height: 70px; width: 1px; }
+
+    /* 导入导出 */
+    .io-grid { display: grid; gap: 12px; }
+    .file-drop {
+      display: block;
+      padding: 18px;
+      border: 1px dashed rgba(31,35,48,.24);
+      border-radius: 20px;
+      background: rgba(255,255,255,.62);
+    }
+    .small-note { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    /* Dock */
+    .dock {
+      position: fixed;
+      left: 14px;
+      right: 14px;
+      bottom: calc(10px + var(--safeB));
+      height: var(--dockH);
+      z-index: 50;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px;
+      max-width: 760px;
+      margin: 0 auto;
+      border-radius: 32px;
+      background: rgba(255,255,255,.82);
+      border: 1px solid rgba(255,255,255,.62);
+      box-shadow: 0 18px 46px rgba(16, 20, 30, .24);
+      backdrop-filter: blur(22px);
+    }
+    .dock button {
+      border-radius: 24px;
+      background: transparent;
+      color: #636b7a;
+      font-size: 13px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      padding: 4px;
+    }
+    .dock button .icon { font-size: 26px; line-height: 1; }
+    .dock button .label { font-size: 13px; font-weight: 1000; }
+    .dock button.active { background: #0b1224; color: #fff; }
+
+    @media (max-width: 520px) {
+      .record-card { grid-template-columns: 88px 1fr; }
+      .record-card img { width: 88px; height: 88px; }
+      .sheet { padding: 18px; border-radius: 24px; }
+      .live-readout { grid-template-columns: 1fr; bottom: calc(var(--dockH) + var(--safeB) + 126px); }
+      .alt-badge { min-height: 74px; display: flex; align-items: baseline; gap: 8px; justify-content: center; }
+      .alt-badge b { display: inline; }
+      .camera-help { bottom: calc(var(--dockH) + var(--safeB) + 220px); }
+      .camera-help span { font-size: 13px; }
+      .shutter { width: 82px; height: 82px; }
+      .mini-control { width: 54px; height: 54px; }
+      .readout-main .dir { font-size: 32px; }
+      .readout-main { min-height: 90px; }
+      .dock button .icon { font-size: 24px; }
+      .dock button .label { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section id="page-observe" class="page active">
+      <div class="camera-ui">
+        <video id="cameraVideo" autoplay playsinline muted></video>
+        <div id="cameraPlaceholder" class="camera-placeholder">
+          <div><b>相机尚未启动</b>点击上方按钮后，用后置摄像头对准太阳附近的圆心。</div>
+        </div>
+        <div class="camera-safe-shade"></div>
+        <div class="target"></div>
+        <div class="sun-dot" aria-hidden="true"></div>
+        <div class="flash" id="flash"></div>
+
+        <div class="top-camera-bar">
+          <div class="status-stack">
+            <button id="startCameraBtn" class="cam-pill warn">启用摄像头</button>
+            <button id="startSensorBtn" class="cam-pill warn">启用传感器</button>
+          </div>
+          <button id="openIntroBtn" class="cam-pill">说明</button>
+        </div>
+
+        <div class="camera-help"><span id="cameraHint">请勿直视太阳；让太阳落在圆心附近，看屏幕完成记录。</span></div>
+
+        <div class="live-readout">
+          <div class="readout-main">
+            <div class="dir"><span id="directionText">--</span><b id="azimuthText">--°</b></div>
+            <div id="detailText" class="sub">先启用传感器，方位和高度角会实时更新。</div>
+          </div>
+          <div class="alt-badge"><small>高度角</small><b id="altitudeText">--°</b></div>
+        </div>
+
+        <div class="shutter-zone">
+          <div class="shutter-row">
+            <button id="locationQuickBtn" class="mini-control" title="定位">📍</button>
+            <button id="captureBtn" class="shutter" title="拍照记录"></button>
+            <button id="demoQuickBtn" class="mini-control" title="演示数据">☀️</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-records" class="page">
+      <div class="sheet">
+        <h2>记录留档</h2>
+        <p>每次记录都会保存一张带水印的观察照片。可以在这里查看、保存、删除，也可以清理间隔过近的重复记录。</p>
+        <div class="record-toolbar">
+          <button id="saveAllJsonBtn" class="blue">导出 JSON</button>
+          <button id="deleteCloseBtn" class="secondary">删除时间过近</button>
+          <button id="clearAllBtn" class="danger">清空全部</button>
+        </div>
+        <div id="recordsList" class="records-grid"></div>
+      </div>
+    </section>
+
+    <section id="page-sim" class="page">
+      <div class="sim-ui" id="simWrap">
+        <canvas id="simCanvas"></canvas>
+        <div class="sim-overlay">
+          <div class="sim-top">
+            <div class="sim-title-pill">3D 太阳位置模拟<small id="viewModeText">第一人称：跟随手机朝向</small></div>
+            <div class="status-stack">
+              <button id="followBtn" class="cam-pill on">跟随手机</button>
+              <button id="overviewBtn" class="cam-pill">全景</button>
+            </div>
+          </div>
+          <div class="reticle-sim"></div>
+          <div class="sim-controls">
+            <div class="sim-panel">
+              <div class="row">
+                <button id="playBtn" class="active">播放 24 小时</button>
+                <button id="rebuildSceneBtn">重建场景</button>
+                <button id="makeDemoBtn">演示数据</button>
+              </div>
+              <div class="row" style="margin-top:10px; gap:10px;">
+                <b id="simTimeText">06:00</b>
+                <input id="timeSlider" class="timeline" type="range" min="0" max="24" value="6" step="0.02" />
+              </div>
+              <div id="simInfo" class="sim-info">拖动可转动视角；双指缩小进入全景。照片只显示记录时圆心附近的太阳区域。</div>
+              <div id="focusBadge" class="focus-badge"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-io" class="page">
+      <div class="sheet">
+        <h2>导入与导出</h2>
+        <p>这里用于教师汇总小组数据，或把本机记录带到其他设备。课堂主流程可以只使用“观测—记录—模拟”。</p>
+        <div class="io-grid">
+          <div class="form-row">
+            <label for="groupNameInput">数据组名称</label>
+            <input id="groupNameInput" class="input" value="第1组" />
+          </div>
+          <div class="form-row">
+            <label for="placeNameInput">观测地点名称</label>
+            <input id="placeNameInput" class="input" placeholder="如：学校操场、教室窗边、宁波市某小学" />
+          </div>
+          <div class="row">
+            <button id="locateBtn" class="secondary">获取当前经纬度</button>
+            <span id="locationStatus" class="small-note">地点会写入照片水印。</span>
+          </div>
+          <hr style="width:100%; border:none; border-top:1px solid var(--line); margin:10px 0;" />
+          <div class="row">
+            <button id="exportJsonBtn" class="blue">导出 JSON（含照片）</button>
+            <button id="exportCsvBtn" class="secondary">导出 CSV（不含照片）</button>
+          </div>
+          <label class="file-drop">
+            <b>导入 JSON / CSV</b><br />
+            <span class="small-note">JSON 可以包含照片；CSV 只导入时间、方位角、高度角、地点、组别等数据。</span><br /><br />
+            <input id="importFileInput" type="file" accept=".json,.csv,application/json,text/csv" />
+          </label>
+          <button id="showIntroAgainBtn" class="secondary">再次查看进入提示</button>
+        </div>
+      </div>
+    </section>
+
+    <nav class="dock" aria-label="底部功能切换">
+      <button class="dock-btn active" data-page="observe"><span class="icon">☀️</span><span class="label">观测</span></button>
+      <button class="dock-btn" data-page="records"><span class="icon">📝</span><span class="label">记录</span></button>
+      <button class="dock-btn" data-page="sim"><span class="icon">🌐</span><span class="label">模拟</span></button>
+      <button class="dock-btn" data-page="io"><span class="icon">⇄</span><span class="label">导入导出</span></button>
+    </nav>
+  </div>
+
+  <div id="intro" class="intro" role="dialog" aria-modal="true">
+    <div class="intro-card">
+      <h1>太阳位置数字化记录器</h1>
+      <p>这个网页把“小学生一天中记录太阳位置变化”的纸笔活动，变成用手机摄像头、指南针和方向传感器完成的数字化观察。</p>
+      <ul>
+        <li>请用后置摄像头对准太阳附近，让太阳落在圆心附近即可。</li>
+        <li>不要用眼睛长时间直视太阳；观察时看手机屏幕。</li>
+        <li>建议竖屏使用，并远离大块金属、磁铁和强电器，减少指南针误差。</li>
+        <li>点击“拍照记录”后，会生成带水印照片，包含时间、地点、方位角、方向描述和高度角。</li>
+      </ul>
+      <div class="form-row">
+        <label for="introGroup">数据组名称</label>
+        <input id="introGroup" class="input" value="第1组" />
+      </div>
+      <div class="form-row">
+        <label for="introPlace">观测地点</label>
+        <input id="introPlace" class="input" placeholder="如：学校操场、教室窗边、宁波市某小学" />
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button id="introStartBtn" class="primary">进入相机界面</button>
+        <button id="introLocBtn" class="secondary">获取定位</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    'use strict';
+
+    const DB_NAME = 'sun_position_tracker_v04';
+    const DB_VERSION = 1;
+    const STORE = 'records';
+    const SETTINGS_KEY = 'sun_tracker_settings_v04';
+    const INTRO_KEY = 'sun_tracker_intro_seen_v04';
+    const DEG = Math.PI / 180;
+    const RAD = 180 / Math.PI;
+
+    const state = {
+      db: null,
+      records: [],
+      stream: null,
+      cameraReady: false,
+      sensorReady: false,
+      sensorSource: '未启动',
+      azimuth: null,
+      altitude: null,
+      headingTop: null,
+      latestOrientation: null,
+      currentVector: { x: 0, y: 0, z: -1 },
+      settings: {
+        groupName: '第1组',
+        placeName: '',
+        coords: null
+      },
+      activePage: 'observe',
+      sim: {
+        renderer: null,
+        scene: null,
+        camera: null,
+        root: null,
+        recordGroup: null,
+        sunNow: null,
+        playing: true,
+        followPhone: true,
+        overview: false,
+        hour: 6,
+        manualAz: 180,
+        manualAlt: 18,
+        distance: 42,
+        sprites: new Map(),
+        lastFrame: performance.now(),
+        dragging: false,
+        lastPointer: null,
+        pointers: new Map(),
+        lastPinchDistance: null,
+        nearest: null
+      }
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function mod(n, m) { return ((n % m) + m) % m; }
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function round1(n) { return Number.isFinite(n) ? Math.round(n * 10) / 10 : null; }
+    function two(n) { return String(n).padStart(2, '0'); }
+    function uid() { return 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+    function showToast(message, ms = 2600) {
+      const toast = $('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), ms);
+    }
+
+    function loadSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+        state.settings = { ...state.settings, ...saved };
+      } catch (_) {}
+      $('groupNameInput').value = state.settings.groupName || '第1组';
+      $('placeNameInput').value = state.settings.placeName || '';
+      $('introGroup').value = state.settings.groupName || '第1组';
+      $('introPlace').value = state.settings.placeName || '';
+      updateLocationStatus();
+    }
+
+    function saveSettings() {
+      state.settings.groupName = $('groupNameInput').value.trim() || state.settings.groupName || '第1组';
+      state.settings.placeName = $('placeNameInput').value.trim() || state.settings.placeName || '';
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+      $('introGroup').value = state.settings.groupName;
+      $('introPlace').value = state.settings.placeName;
+      updateLocationStatus();
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) {
+            const store = db.createObjectStore(STORE, { keyPath: 'id' });
+            store.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function withStore(mode, fn) {
+      if (!state.db) state.db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = state.db.transaction(STORE, mode);
+        const store = tx.objectStore(STORE);
+        const result = fn(store);
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function putRecord(record) {
+      await withStore('readwrite', (store) => store.put(record));
+    }
+
+    async function deleteRecord(id) {
+      await withStore('readwrite', (store) => store.delete(id));
+      state.records = state.records.filter(r => r.id !== id);
+      renderRecords();
+      buildSimScene();
+    }
+
+    async function clearRecords() {
+      await withStore('readwrite', (store) => store.clear());
+      state.records = [];
+      renderRecords();
+      buildSimScene();
+    }
+
+    async function loadRecords() {
+      state.records = await new Promise(async (resolve, reject) => {
+        if (!state.db) state.db = await openDB();
+        const tx = state.db.transaction(STORE, 'readonly');
+        const store = tx.objectStore(STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      state.records.sort((a, b) => new Date(a.timeISO) - new Date(b.timeISO));
+      renderRecords();
+    }
+
+    function formatDateTime(dateLike) {
+      const d = new Date(dateLike);
+      return `${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+    }
+    function formatTime(dateLike) {
+      const d = new Date(dateLike);
+      return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+    }
+
+    function directionPhrase(az) {
+      if (!Number.isFinite(az)) return '--';
+      const a = mod(az, 360);
+      const near = (v) => Math.abs(a - v) < .5 || Math.abs(a - v + 360) < .5 || Math.abs(a - v - 360) < .5;
+      if (near(0) || near(360)) return '正北';
+      if (near(90)) return '正东';
+      if (near(180)) return '正南';
+      if (near(270)) return '正西';
+      let main, side, deg;
+      if (a < 90) {
+        if (a <= 45) { main = '北'; side = '东'; deg = a; }
+        else { main = '东'; side = '北'; deg = 90 - a; }
+      } else if (a < 180) {
+        if (a <= 135) { main = '东'; side = '南'; deg = a - 90; }
+        else { main = '南'; side = '东'; deg = 180 - a; }
+      } else if (a < 270) {
+        if (a <= 225) { main = '南'; side = '西'; deg = a - 180; }
+        else { main = '西'; side = '南'; deg = 270 - a; }
+      } else {
+        if (a <= 315) { main = '西'; side = '北'; deg = a - 270; }
+        else { main = '北'; side = '西'; deg = 360 - a; }
+      }
+      return `${main}偏${side}${Math.round(deg)}°`;
+    }
+
+    function directionShort(az) {
+      if (!Number.isFinite(az)) return '--';
+      const dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+      return dirs[Math.round(mod(az, 360) / 45) % 8];
+    }
+
+    function vectorFromAzAlt(az, alt, radius = 1) {
+      const ar = az * DEG, er = alt * DEG;
+      return {
+        x: Math.sin(ar) * Math.cos(er) * radius,
+        y: Math.sin(er) * radius,
+        z: -Math.cos(ar) * Math.cos(er) * radius
+      };
+    }
+
+    function azAltFromVector(v) {
+      const len = Math.hypot(v.x, v.y, v.z) || 1;
+      const alt = Math.asin(clamp(v.y / len, -1, 1)) * RAD;
+      const az = mod(Math.atan2(v.x, -v.z) * RAD, 360);
+      return { azimuth: az, altitude: alt };
+    }
+
+    function angularDistance(a, b) {
+      const av = vectorFromAzAlt(a.azimuth, a.altitude, 1);
+      const bv = vectorFromAzAlt(b.azimuth, b.altitude, 1);
+      const dot = clamp(av.x*bv.x + av.y*bv.y + av.z*bv.z, -1, 1);
+      return Math.acos(dot) * RAD;
+    }
+
+    // W3C DeviceOrientation 旋转矩阵。alpha 参数使用 360 - 指南针方位，使设备顶部朝北时 alpha = 0。
+    function cameraVectorFromOrientation(alphaMatrix, beta, gamma) {
+      const x = (beta || 0) * DEG;
+      const y = (gamma || 0) * DEG;
+      const z = (alphaMatrix || 0) * DEG;
+      const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
+      const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
+      const m13 = cY * sZ * sX + cZ * sY;
+      const m23 = sZ * sY - cZ * cY * sX;
+      const m33 = cX * cY;
+      // 设备 z 轴正方向通常指向屏幕外侧；后置摄像头方向取 -z 轴。
+      return { x: -m13, y: -m33, z: m23 };
+    }
+
+    function readOrientation(event) {
+      let alphaMatrix = null;
+      let topHeading = null;
+      let source = '相对方向';
+
+      if (Number.isFinite(event.webkitCompassHeading)) {
+        topHeading = mod(event.webkitCompassHeading, 360);
+        alphaMatrix = mod(360 - topHeading, 360);
+        source = `iOS 指南针 ±${Math.round(event.webkitCompassAccuracy || 0)}°`;
+      } else if (event.absolute === true && Number.isFinite(event.alpha)) {
+        alphaMatrix = mod(event.alpha, 360);
+        topHeading = mod(360 - event.alpha, 360);
+        source = '绝对方向';
+      } else if (Number.isFinite(event.alpha)) {
+        // 退化：只能得到相对方向，仍允许课堂演示。
+        alphaMatrix = mod(event.alpha, 360);
+        topHeading = mod(360 - event.alpha, 360);
+        source = '相对方向，需校准';
+      }
+
+      if (!Number.isFinite(alphaMatrix) || !Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+
+      const vec = cameraVectorFromOrientation(alphaMatrix, event.beta, event.gamma);
+      const aa = azAltFromVector(vec);
+      state.azimuth = aa.azimuth;
+      state.altitude = aa.altitude;
+      state.headingTop = topHeading;
+      state.currentVector = vec;
+      state.sensorReady = true;
+      state.sensorSource = source;
+      state.latestOrientation = {
+        alpha: event.alpha,
+        beta: event.beta,
+        gamma: event.gamma,
+        topHeading,
+        source
+      };
+      updateLiveReadout();
+    }
+
+    function observationAdvice(altitude) {
+      if (!Number.isFinite(altitude)) return '等待传感器读数。';
+      if (altitude < -8) return '请抬高镜头，太阳应在地平线以上。';
+      if (altitude > 75) return '镜头接近头顶方向，注意遮光并看屏幕观察。';
+      return '让太阳落在圆心附近，点击记录。';
+    }
+
+    function updateLiveReadout() {
+      const az = state.azimuth;
+      const alt = state.altitude;
+      $('azimuthText').textContent = Number.isFinite(az) ? `${round1(az).toFixed(1)}°` : '--°';
+      $('directionText').textContent = Number.isFinite(az) ? directionPhrase(az) : '--';
+      $('altitudeText').textContent = Number.isFinite(alt) ? `${round1(alt).toFixed(1)}°` : '--°';
+      const source = state.sensorReady ? state.sensorSource : '传感器未启动';
+      const hint = observationAdvice(alt);
+      $('detailText').textContent = `${source} · ${hint}`;
+      $('cameraHint').textContent = Number.isFinite(az)
+        ? `${directionPhrase(az)}，高度角 ${round1(alt).toFixed(1)}°。${hint}`
+        : '请勿直视太阳；让太阳落在圆心附近，看屏幕完成记录。';
+    }
+
+    function updateStatusButtons() {
+      const cam = $('startCameraBtn');
+      cam.textContent = state.cameraReady ? '摄像头已启用' : '启用摄像头';
+      cam.classList.toggle('on', state.cameraReady);
+      cam.classList.toggle('warn', !state.cameraReady);
+
+      const sen = $('startSensorBtn');
+      sen.textContent = state.sensorReady ? '传感器已启用' : '启用传感器';
+      sen.classList.toggle('on', state.sensorReady);
+      sen.classList.toggle('warn', !state.sensorReady);
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('当前环境不能调用摄像头。请用 HTTPS 页面在 Safari 或 Chrome 中打开。', 4200);
+        return;
+      }
+      try {
+        if (state.stream) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        state.stream = stream;
+        const video = $('cameraVideo');
+        video.srcObject = stream;
+        await video.play();
+        state.cameraReady = true;
+        $('cameraPlaceholder').classList.add('hidden');
+        updateStatusButtons();
+        showToast('摄像头已启动。请继续启用传感器。');
+      } catch (err) {
+        console.error(err);
+        showToast('摄像头启动失败：请检查浏览器权限，或不要在 WPS / 微信文件预览中打开。', 4800);
+      }
+    }
+
+    let sensorListenersAdded = false;
+    async function startSensor() {
+      if (typeof DeviceOrientationEvent === 'undefined') {
+        showToast('当前浏览器不支持方向传感器。', 3600);
+        return;
+      }
+      try {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          let permission;
+          try { permission = await DeviceOrientationEvent.requestPermission(true); }
+          catch (_) { permission = await DeviceOrientationEvent.requestPermission(); }
+          if (permission !== 'granted') {
+            showToast('方向传感器权限未授予。');
+            return;
+          }
+        }
+        if (!sensorListenersAdded) {
+          window.addEventListener('deviceorientation', readOrientation, true);
+          window.addEventListener('deviceorientationabsolute', readOrientation, true);
+          sensorListenersAdded = true;
+        }
+        state.sensorReady = true;
+        updateStatusButtons();
+        updateLiveReadout();
+        showToast('传感器已启动。移动手机，读数会像指南针一样更新。');
+      } catch (err) {
+        console.error(err);
+        showToast('传感器启动失败。iPhone 请使用 Safari，并在点击按钮后允许方向访问。', 4800);
+      }
+    }
+
+    async function locate() {
+      if (!navigator.geolocation) {
+        showToast('当前浏览器不支持定位。可以手动填写地点名称。');
+        return;
+      }
+      showToast('正在请求定位权限……');
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const c = pos.coords;
+        state.settings.coords = {
+          latitude: c.latitude,
+          longitude: c.longitude,
+          accuracy: c.accuracy
+        };
+        if (!$('placeNameInput').value.trim() && !$('introPlace').value.trim()) {
+          const text = `${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)}`;
+          $('placeNameInput').value = text;
+          $('introPlace').value = text;
+          state.settings.placeName = text;
+        }
+        saveSettings();
+        showToast(`已获取坐标：${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)}`);
+      }, (err) => {
+        console.error(err);
+        showToast('定位失败。可以在“导入导出”页手动填写地点名称。', 4200);
+      }, { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 });
+    }
+
+    function placeLabel() {
+      const name = (state.settings.placeName || '').trim();
+      if (name) return name;
+      if (state.settings.coords) return `${state.settings.coords.latitude.toFixed(5)}, ${state.settings.coords.longitude.toFixed(5)}`;
+      return '未填写地点';
+    }
+
+    function updateLocationStatus() {
+      const coords = state.settings.coords ? `；坐标 ${state.settings.coords.latitude.toFixed(5)}, ${state.settings.coords.longitude.toFixed(5)}` : '';
+      $('locationStatus').textContent = `当前地点：${placeLabel()}${coords}`;
+    }
+
+    function syncIntroToSettings() {
+      state.settings.groupName = $('introGroup').value.trim() || '第1组';
+      state.settings.placeName = $('introPlace').value.trim() || state.settings.placeName || '';
+      $('groupNameInput').value = state.settings.groupName;
+      $('placeNameInput').value = state.settings.placeName;
+      saveSettings();
+    }
+
+    function showIntro(force = false) {
+      if (force || localStorage.getItem(INTRO_KEY) !== '1') {
+        $('intro').classList.add('show');
+      }
+    }
+    function hideIntro() {
+      syncIntroToSettings();
+      localStorage.setItem(INTRO_KEY, '1');
+      $('intro').classList.remove('show');
+    }
+
+    function drawRoundedRect(ctx, x, y, w, h, r) {
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 4) {
+      const chars = Array.from(text);
+      let line = '';
+      let lines = 0;
+      for (const ch of chars) {
+        const test = line + ch;
+        if (ctx.measureText(test).width > maxWidth && line) {
+          ctx.fillText(line, x, y);
+          y += lineHeight;
+          lines++;
+          line = ch;
+          if (lines >= maxLines - 1) break;
+        } else {
+          line = test;
+        }
+      }
+      if (line && lines < maxLines) ctx.fillText(line, x, y);
+    }
+
+    async function createWatermarkedImages() {
+      const video = $('cameraVideo');
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      const maxW = 1280;
+      const scale = Math.min(1, maxW / vw);
+      const w = Math.round(vw * scale);
+      const h = Math.round(vh * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, w, h);
+
+      const now = new Date();
+      const az = round1(state.azimuth);
+      const alt = round1(state.altitude);
+      const direction = directionPhrase(az);
+      const group = state.settings.groupName || '第1组';
+      const place = placeLabel();
+      const dt = formatDateTime(now);
+
+      // 目标圆与中心点，方便说明“太阳落在圆心附近”。
+      const cx = w / 2;
+      const cy = h * .45;
+      const r = Math.min(w, h) * .16;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,.82)';
+      ctx.lineWidth = Math.max(2, w * .003);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - r*1.25, cy); ctx.lineTo(cx + r*1.25, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - r*1.25); ctx.lineTo(cx, cy + r*1.25); ctx.stroke();
+      ctx.restore();
+
+      const pad = Math.round(w * .035);
+      const panelH = Math.round(h * .28);
+      const panelY = h - panelH - pad;
+      drawRoundedRect(ctx, pad, panelY, w - pad * 2, panelH, Math.round(w * .035));
+      ctx.fillStyle = 'rgba(0,0,0,.62)';
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.round(w * .035)}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.fillText('太阳位置观察记录', pad * 1.6, panelY + pad * 1.35);
+
+      ctx.font = `800 ${Math.round(w * .025)}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      const line1 = `时间：${dt}    组别：${group}`;
+      const line2 = `地点：${place}`;
+      const line3 = `太阳方位：${az.toFixed(1)}°，${direction}    太阳高度角：${alt.toFixed(1)}°`;
+      ctx.fillText(line1, pad * 1.6, panelY + pad * 2.35);
+      wrapText(ctx, line2, pad * 1.6, panelY + pad * 3.25, w - pad * 3.2, Math.round(w * .034), 2);
+      ctx.fillText(line3, pad * 1.6, panelY + panelH - pad * .9);
+
+      // 给模拟页使用：只截取圆心附近的太阳区域。
+      const cropSize = Math.round(Math.min(w, h) * .34);
+      const sx = clamp(Math.round(cx - cropSize / 2), 0, w - cropSize);
+      const sy = clamp(Math.round(cy - cropSize / 2), 0, h - cropSize);
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 420;
+      thumbCanvas.height = 420;
+      const tctx = thumbCanvas.getContext('2d');
+      tctx.drawImage(canvas, sx, sy, cropSize, cropSize, 0, 0, 420, 420);
+      tctx.globalCompositeOperation = 'destination-in';
+      tctx.beginPath();
+      tctx.arc(210, 210, 206, 0, Math.PI * 2);
+      tctx.fill();
+      tctx.globalCompositeOperation = 'source-over';
+      tctx.strokeStyle = 'rgba(255,255,255,.75)';
+      tctx.lineWidth = 8;
+      tctx.stroke();
+
+      return {
+        imageData: canvas.toDataURL('image/jpeg', .84),
+        thumbData: thumbCanvas.toDataURL('image/png'),
+        timeISO: now.toISOString()
+      };
+    }
+
+    async function captureRecord() {
+      saveSettings();
+      if (!state.cameraReady) {
+        showToast('请先启用摄像头。');
+        return;
+      }
+      if (!Number.isFinite(state.azimuth) || !Number.isFinite(state.altitude)) {
+        showToast('请先启用传感器，并稍微移动手机等待读数。');
+        return;
+      }
+      const flash = $('flash');
+      flash.classList.add('show');
+      setTimeout(() => flash.classList.remove('show'), 120);
+
+      const images = await createWatermarkedImages();
+      const seq = state.records.length + 1;
+      const record = {
+        id: uid(),
+        seq,
+        groupName: state.settings.groupName || '第1组',
+        placeName: placeLabel(),
+        coords: state.settings.coords,
+        timeISO: images.timeISO,
+        azimuth: round1(state.azimuth),
+        altitude: round1(state.altitude),
+        direction: directionPhrase(state.azimuth),
+        directionShort: directionShort(state.azimuth),
+        source: state.sensorSource,
+        imageData: images.imageData,
+        thumbData: images.thumbData,
+        createdAt: Date.now()
+      };
+      await putRecord(record);
+      state.records.push(record);
+      state.records.sort((a, b) => new Date(a.timeISO) - new Date(b.timeISO));
+      renumberRecords();
+      await Promise.all(state.records.map(putRecord));
+      renderRecords();
+      buildSimScene();
+      showToast(`已记录第 ${record.seq} 次：${formatTime(record.timeISO)}，${record.direction}，高度角 ${record.altitude.toFixed(1)}°。`, 3600);
+    }
+
+    function renumberRecords() {
+      state.records.sort((a, b) => new Date(a.timeISO) - new Date(b.timeISO));
+      state.records.forEach((r, i) => { r.seq = i + 1; });
+    }
+
+    function timeGapText(i) {
+      if (i <= 0) return '第一条记录';
+      const prev = new Date(state.records[i-1].timeISO).getTime();
+      const cur = new Date(state.records[i].timeISO).getTime();
+      const sec = Math.max(0, Math.round((cur - prev) / 1000));
+      if (sec < 60) return `距上一条 ${sec} 秒`;
+      return `距上一条 ${Math.floor(sec/60)} 分 ${sec%60} 秒`;
+    }
+
+    function downloadDataUrl(dataUrl, filename) {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function renderRecords() {
+      const list = $('recordsList');
+      list.innerHTML = '';
+      if (!state.records.length) {
+        list.innerHTML = '<div class="empty">还没有记录。回到“观测”页，对准太阳后点击记录按钮。</div>';
+        return;
+      }
+      state.records.forEach((r, i) => {
+        const gap = timeGapText(i);
+        const close = i > 0 && (new Date(r.timeISO) - new Date(state.records[i-1].timeISO)) < 5 * 60 * 1000;
+        const card = document.createElement('div');
+        card.className = 'record-card';
+        const img = document.createElement('img');
+        img.src = r.thumbData || r.imageData || '';
+        img.alt = `第 ${r.seq} 次太阳记录缩略图`;
+        const info = document.createElement('div');
+        info.innerHTML = `
+          <div class="record-title">第 ${r.seq || i+1} 次 · ${r.groupName || '第1组'}</div>
+          <div class="record-meta">
+            时间：${formatDateTime(r.timeISO)}<br />
+            地点：${escapeHTML(r.placeName || '未填写地点')}<br />
+            方位：${Number(r.azimuth).toFixed(1)}°，${escapeHTML(r.direction || directionPhrase(r.azimuth))}<br />
+            高度角：${Number(r.altitude).toFixed(1)}°<br />
+            <span class="${close ? 'close-time' : ''}">${gap}${close ? ' · 时间过近' : ''}</span>
+          </div>`;
+        const actions = document.createElement('div');
+        actions.className = 'record-actions';
+        const save = document.createElement('button');
+        save.textContent = '保存照片';
+        save.addEventListener('click', () => downloadDataUrl(r.imageData, filenameForRecord(r, 'jpg')));
+        const sim = document.createElement('button');
+        sim.textContent = '在模拟中查看';
+        sim.addEventListener('click', () => {
+          switchPage('sim');
+          state.sim.hour = hourOfRecord(r);
+          $('timeSlider').value = state.sim.hour;
+          state.sim.followPhone = false;
+          state.sim.overview = false;
+          state.sim.manualAz = r.azimuth;
+          state.sim.manualAlt = clamp(r.altitude, -20, 80);
+          updateSimButtons();
+        });
+        const del = document.createElement('button');
+        del.textContent = '删除';
+        del.className = 'delete-one';
+        del.addEventListener('click', async () => {
+          if (confirm('删除这条记录吗？')) await deleteRecord(r.id);
+        });
+        actions.append(save, sim, del);
+        info.appendChild(actions);
+        card.append(img, info);
+        list.appendChild(card);
+      });
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>'"]/g, s => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'}[s]));
+    }
+
+    function filenameForRecord(r, ext = 'jpg') {
+      const time = formatDateTime(r.timeISO).replace(/[: ]/g, '-');
+      return `太阳位置记录_${r.groupName || '第1组'}_第${r.seq || 1}次_${time}.${ext}`;
+    }
+
+    function hourOfRecord(r) {
+      const d = new Date(r.timeISO);
+      return d.getHours() + d.getMinutes()/60 + d.getSeconds()/3600;
+    }
+
+    async function deleteCloseRecords() {
+      if (state.records.length < 2) return;
+      const keep = [];
+      const remove = [];
+      let lastKeptTime = null;
+      for (const r of state.records) {
+        const t = new Date(r.timeISO).getTime();
+        if (lastKeptTime === null || t - lastKeptTime >= 5 * 60 * 1000) {
+          keep.push(r); lastKeptTime = t;
+        } else {
+          remove.push(r);
+        }
+      }
+      if (!remove.length) {
+        showToast('没有发现 5 分钟内的过近记录。');
+        return;
+      }
+      if (!confirm(`将删除 ${remove.length} 条时间过近的记录，保留每段中的较早记录。继续吗？`)) return;
+      for (const r of remove) await withStore('readwrite', (store) => store.delete(r.id));
+      state.records = keep;
+      renumberRecords();
+      await Promise.all(state.records.map(putRecord));
+      renderRecords();
+      buildSimScene();
+      showToast(`已删除 ${remove.length} 条时间过近记录。`);
+    }
+
+    function exportJSON() {
+      saveSettings();
+      const payload = {
+        app: '太阳位置数字化记录器',
+        version: 'v04',
+        exportedAt: new Date().toISOString(),
+        settings: state.settings,
+        records: state.records
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      downloadBlob(blob, `太阳位置记录_${Date.now()}.json`);
+    }
+
+    function exportCSV() {
+      const header = ['seq','group','time','place','azimuth','direction','altitude','source'];
+      const rows = state.records.map(r => [
+        r.seq,
+        r.groupName,
+        r.timeISO,
+        r.placeName,
+        r.azimuth,
+        r.direction,
+        r.altitude,
+        r.source
+      ]);
+      const text = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+      const blob = new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' });
+      downloadBlob(blob, `太阳位置记录_${Date.now()}.csv`);
+    }
+
+    function csvCell(v) {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function importFile(file) {
+      if (!file) return;
+      const text = await file.text();
+      let imported = [];
+      try {
+        if (file.name.toLowerCase().endsWith('.json')) {
+          const payload = JSON.parse(text);
+          imported = Array.isArray(payload) ? payload : (payload.records || []);
+          if (payload.settings) {
+            state.settings = { ...state.settings, ...payload.settings };
+            $('groupNameInput').value = state.settings.groupName || '第1组';
+            $('placeNameInput').value = state.settings.placeName || '';
+            saveSettings();
+          }
+        } else {
+          imported = parseCSV(text);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('导入失败：文件格式无法解析。');
+        return;
+      }
+      let count = 0;
+      for (const r of imported) {
+        const record = normalizeImportedRecord(r);
+        if (!record) continue;
+        await putRecord(record);
+        state.records.push(record);
+        count++;
+      }
+      renumberRecords();
+      await Promise.all(state.records.map(putRecord));
+      renderRecords();
+      buildSimScene();
+      showToast(`已导入 ${count} 条记录。`);
+    }
+
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/).filter(Boolean);
+      if (!lines.length) return [];
+      const first = splitCSVLine(lines[0]);
+      const hasHeader = first.some(x => /time|azimuth|heading|altitude|方位|高度/i.test(x));
+      const headers = hasHeader ? first.map(h => h.trim().toLowerCase()) : ['time','azimuth','altitude'];
+      const body = hasHeader ? lines.slice(1) : lines;
+      return body.map(line => {
+        const cells = splitCSVLine(line);
+        const obj = {};
+        headers.forEach((h, i) => obj[h] = cells[i]);
+        return obj;
+      });
+    }
+    function splitCSVLine(line) {
+      const out = [];
+      let cur = '', q = false;
+      for (let i=0; i<line.length; i++) {
+        const ch = line[i];
+        if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') q = !q;
+        else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      out.push(cur);
+      return out;
+    }
+
+    function normalizeImportedRecord(r) {
+      const az = Number(r.azimuth ?? r.heading ?? r['方位角'] ?? r['太阳方位角']);
+      const alt = Number(r.altitude ?? r['高度角'] ?? r['太阳高度角']);
+      if (!Number.isFinite(az) || !Number.isFinite(alt)) return null;
+      const time = r.timeISO || r.time || r['时间'] || new Date().toISOString();
+      const iso = isNaN(new Date(time).getTime()) ? new Date().toISOString() : new Date(time).toISOString();
+      return {
+        id: r.id || uid(),
+        seq: r.seq || state.records.length + 1,
+        groupName: r.groupName || r.group || r['组别'] || state.settings.groupName || '导入数据',
+        placeName: r.placeName || r.place || r['地点'] || state.settings.placeName || '导入数据',
+        coords: r.coords || null,
+        timeISO: iso,
+        azimuth: round1(az),
+        altitude: round1(alt),
+        direction: r.direction || directionPhrase(az),
+        directionShort: r.directionShort || directionShort(az),
+        source: r.source || '导入数据',
+        imageData: r.imageData || '',
+        thumbData: r.thumbData || '',
+        createdAt: r.createdAt || Date.now()
+      };
+    }
+
+    async function generateDemoData() {
+      const base = new Date();
+      base.setHours(6, 30, 0, 0);
+      const demo = [
+        { h: 6.5, az: 82, alt: 8 },
+        { h: 8.5, az: 112, alt: 25 },
+        { h: 10.5, az: 150, alt: 48 },
+        { h: 12.2, az: 184, alt: 62 },
+        { h: 14.3, az: 224, alt: 43 },
+        { h: 16.5, az: 260, alt: 18 },
+        { h: 17.8, az: 282, alt: 5 }
+      ];
+      const thumbs = demo.map((d, i) => makeDemoThumb(i));
+      for (let i=0; i<demo.length; i++) {
+        const d = demo[i];
+        const time = new Date(base);
+        time.setHours(Math.floor(d.h), Math.round((d.h % 1) * 60), 0, 0);
+        const rec = {
+          id: uid(),
+          seq: state.records.length + 1,
+          groupName: state.settings.groupName || '第1组',
+          placeName: placeLabel(),
+          coords: state.settings.coords,
+          timeISO: time.toISOString(),
+          azimuth: d.az,
+          altitude: d.alt,
+          direction: directionPhrase(d.az),
+          directionShort: directionShort(d.az),
+          source: '演示数据',
+          imageData: thumbs[i],
+          thumbData: thumbs[i],
+          createdAt: Date.now() + i
+        };
+        await putRecord(rec);
+        state.records.push(rec);
+      }
+      renumberRecords();
+      await Promise.all(state.records.map(putRecord));
+      renderRecords();
+      buildSimScene();
+      showToast('已生成一组演示太阳位置数据。');
+    }
+
+    function makeDemoThumb(i) {
+      const c = document.createElement('canvas');
+      c.width = 420; c.height = 420;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(210, 210, 10, 210, 210, 210);
+      g.addColorStop(0, '#fff9b8');
+      g.addColorStop(.18, '#ffd14a');
+      g.addColorStop(.42, '#f58a2a');
+      g.addColorStop(1, '#18253b');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 420, 420);
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      for (let k=0; k<18; k++) {
+        const a = (k/18)*Math.PI*2;
+        ctx.beginPath();
+        ctx.moveTo(210 + Math.cos(a)*70, 210 + Math.sin(a)*70);
+        ctx.lineTo(210 + Math.cos(a)*170, 210 + Math.sin(a)*170);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,238,150,.42)';
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(0,0,0,.48)';
+      ctx.font = '900 34px sans-serif';
+      ctx.fillText(`演示${i+1}`, 138, 372);
+      return c.toDataURL('image/png');
+    }
+
+    /* Three.js 模拟 */
+    function initSim() {
+      if (!window.THREE) {
+        $('simInfo').textContent = 'Three.js 未加载成功。请检查学校网络是否拦截 CDN。';
+        return;
+      }
+      const canvas = $('simCanvas');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x07101d);
+      const camera = new THREE.PerspectiveCamera(62, 1, .1, 260);
+      state.sim.renderer = renderer;
+      state.sim.scene = scene;
+      state.sim.camera = camera;
+
+      const light = new THREE.HemisphereLight(0xffffff, 0x102033, 1.6);
+      scene.add(light);
+      const amb = new THREE.AmbientLight(0xffffff, .8);
+      scene.add(amb);
+      state.sim.root = new THREE.Group();
+      scene.add(state.sim.root);
+      state.sim.recordGroup = new THREE.Group();
+      scene.add(state.sim.recordGroup);
+      buildSimScene();
+      bindSimGestures();
+      resizeSim();
+      window.addEventListener('resize', resizeSim);
+      requestAnimationFrame(renderSim);
+    }
+
+    function resizeSim() {
+      if (!state.sim.renderer) return;
+      const canvas = $('simCanvas');
+      const rect = canvas.getBoundingClientRect();
+      state.sim.renderer.setSize(rect.width, rect.height, false);
+      state.sim.camera.aspect = rect.width / Math.max(1, rect.height);
+      state.sim.camera.updateProjectionMatrix();
+    }
+
+    function clearGroup(group) {
+      if (!group) return;
+      while (group.children.length) {
+        const child = group.children.pop();
+        child.traverse?.((obj) => {
+          if (obj.geometry) obj.geometry.dispose?.();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose?.());
+            else obj.material.dispose?.();
+          }
+        });
+      }
+    }
+
+    function buildSimScene() {
+      if (!state.sim.scene || !window.THREE) return;
+      clearGroup(state.sim.root);
+      clearGroup(state.sim.recordGroup);
+      state.sim.sprites.clear();
+      const R = 52;
+      const root = state.sim.root;
+
+      const domeGeo = new THREE.SphereGeometry(R, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeMat = new THREE.MeshBasicMaterial({ color: 0x203955, transparent: true, opacity: .58, side: THREE.BackSide });
+      const dome = new THREE.Mesh(domeGeo, domeMat);
+      root.add(dome);
+
+      addAltitudeCircle(root, R, 0, 0xd5e8ff, .5);
+      addAltitudeCircle(root, R, 30, 0x7ca1c5, .32);
+      addAltitudeCircle(root, R, 60, 0x7ca1c5, .32);
+      addCardinalLabels(root, R);
+      addSunPath(root, R);
+
+      const nowGeo = new THREE.SphereGeometry(1.1, 24, 16);
+      const nowMat = new THREE.MeshBasicMaterial({ color: 0xffd35a });
+      state.sim.sunNow = new THREE.Mesh(nowGeo, nowMat);
+      root.add(state.sim.sunNow);
+
+      state.records.forEach((r) => addRecordSprite(r, R));
+    }
+
+    function addAltitudeCircle(group, R, alt, color, opacity) {
+      const pts = [];
+      for (let i=0; i<=160; i++) {
+        const az = i / 160 * 360;
+        const p = vectorFromAzAlt(az, alt, R);
+        pts.push(new THREE.Vector3(p.x, p.y, p.z));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+      group.add(new THREE.Line(geo, mat));
+      if (alt > 0) {
+        const label = makeTextSprite(`${alt}°`, 'rgba(255,255,255,.74)', 64);
+        const p = vectorFromAzAlt(180, alt, R);
+        label.position.set(p.x, p.y + 1.2, p.z);
+        label.scale.set(4, 2, 1);
+        group.add(label);
+      }
+    }
+
+    function addCardinalLabels(group, R) {
+      const data = [
+        ['北', 0], ['东', 90], ['南', 180], ['西', 270]
+      ];
+      data.forEach(([txt, az]) => {
+        const p = vectorFromAzAlt(az, 2, R * .96);
+        const sp = makeTextSprite(txt, '#ffffff', 72);
+        sp.position.set(p.x, p.y + 1.2, p.z);
+        sp.scale.set(5.5, 3.2, 1);
+        group.add(sp);
+      });
+    }
+
+    function addSunPath(group, R) {
+      const pts = [];
+      for (let h=5.5; h<=18.5; h+=.15) {
+        const s = referenceSunPosition(h);
+        const p = vectorFromAzAlt(s.azimuth, s.altitude, R * .98);
+        pts.push(new THREE.Vector3(p.x, p.y, p.z));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: 0xffd35a, transparent: true, opacity: .78 });
+      group.add(new THREE.Line(geo, mat));
+      [6, 9, 12, 15, 18].forEach(h => {
+        const s = referenceSunPosition(h);
+        const p = vectorFromAzAlt(s.azimuth, s.altitude, R * .98);
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(.55, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffde75 }));
+        ball.position.set(p.x, p.y, p.z);
+        group.add(ball);
+        const label = makeTextSprite(`${two(h)}:00`, 'rgba(255,255,255,.78)', 52);
+        label.position.set(p.x, p.y + 1.9, p.z);
+        label.scale.set(4, 2, 1);
+        group.add(label);
+      });
+    }
+
+    function referenceSunPosition(hour) {
+      // 教学参考路径：北半球中纬度，太阳大致东升、南高、西落。夜间低于地平线。
+      const h = mod(hour, 24);
+      if (h < 6 || h > 18) {
+        const phase = h < 6 ? h / 6 : (24 - h) / 6;
+        return { azimuth: h < 6 ? 58 : 302, altitude: -18 + phase * 12 };
+      }
+      const t = (h - 6) / 12;
+      const az = 88 + t * 184;
+      const alt = Math.sin(t * Math.PI) * 62;
+      return { azimuth: az, altitude: alt };
+    }
+
+    function addRecordSprite(record, R) {
+      const tex = record.thumbData ? new THREE.TextureLoader().load(record.thumbData) : makeRecordTexture(record);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: .98, depthTest: true });
+      const sp = new THREE.Sprite(mat);
+      const p = vectorFromAzAlt(record.azimuth, record.altitude, R * .93);
+      sp.position.set(p.x, p.y, p.z);
+      sp.scale.set(4.8, 4.8, 1);
+      sp.userData.recordId = record.id;
+      sp.userData.baseScale = 4.8;
+      state.sim.recordGroup.add(sp);
+      state.sim.sprites.set(record.id, sp);
+
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(.45, 14, 10), new THREE.MeshBasicMaterial({ color: 0xff5c7a }));
+      marker.position.set(p.x, p.y, p.z);
+      state.sim.recordGroup.add(marker);
+
+      const label = makeTextSprite(formatTime(record.timeISO).slice(0,5), 'rgba(255,255,255,.88)', 54);
+      label.position.set(p.x, p.y + 2.8, p.z);
+      label.scale.set(4.2, 2, 1);
+      state.sim.recordGroup.add(label);
+    }
+
+    function makeRecordTexture(record) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#203955'; ctx.fillRect(0,0,256,256);
+      ctx.fillStyle = '#ffd35a'; ctx.beginPath(); ctx.arc(128,105,45,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '900 24px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(record.directionShort || directionShort(record.azimuth), 128, 190);
+      const tex = new THREE.CanvasTexture(c);
+      return tex;
+    }
+
+    function makeTextSprite(text, color = '#fff', fontSize = 64) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 192;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = 'rgba(0,0,0,.45)';
+      ctx.strokeText(text, 256, 96);
+      ctx.fillStyle = color;
+      ctx.fillText(text, 256, 96);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    }
+
+    function bindSimGestures() {
+      const wrap = $('simWrap');
+      wrap.addEventListener('pointerdown', (e) => {
+        state.sim.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        wrap.setPointerCapture(e.pointerId);
+        if (state.sim.pointers.size === 1) {
+          state.sim.dragging = true;
+          state.sim.lastPointer = { x: e.clientX, y: e.clientY };
+        }
+        if (state.sim.pointers.size === 2) {
+          state.sim.lastPinchDistance = pointerDistance();
+        }
+      });
+      wrap.addEventListener('pointermove', (e) => {
+        if (!state.sim.pointers.has(e.pointerId)) return;
+        state.sim.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (state.sim.pointers.size === 2) {
+          const d = pointerDistance();
+          if (state.sim.lastPinchDistance) {
+            const ratio = d / state.sim.lastPinchDistance;
+            if (ratio < .92) setOverview(true);
+            if (ratio > 1.08) setOverview(false);
+          }
+          state.sim.lastPinchDistance = d;
+          return;
+        }
+        if (state.sim.dragging && state.sim.lastPointer && !state.sim.followPhone) {
+          const dx = e.clientX - state.sim.lastPointer.x;
+          const dy = e.clientY - state.sim.lastPointer.y;
+          state.sim.manualAz = mod(state.sim.manualAz + dx * .22, 360);
+          state.sim.manualAlt = clamp(state.sim.manualAlt - dy * .18, -35, 82);
+          state.sim.lastPointer = { x: e.clientX, y: e.clientY };
+        } else if (state.sim.dragging && state.sim.lastPointer && state.sim.overview) {
+          const dx = e.clientX - state.sim.lastPointer.x;
+          const dy = e.clientY - state.sim.lastPointer.y;
+          state.sim.manualAz = mod(state.sim.manualAz + dx * .2, 360);
+          state.sim.manualAlt = clamp(state.sim.manualAlt + dy * .12, 18, 80);
+          state.sim.lastPointer = { x: e.clientX, y: e.clientY };
+        }
+      });
+      function endPointer(e) {
+        state.sim.pointers.delete(e.pointerId);
+        if (state.sim.pointers.size < 2) state.sim.lastPinchDistance = null;
+        if (state.sim.pointers.size === 0) state.sim.dragging = false;
+      }
+      wrap.addEventListener('pointerup', endPointer);
+      wrap.addEventListener('pointercancel', endPointer);
+      wrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (e.deltaY > 0) setOverview(true); else setOverview(false);
+      }, { passive: false });
+    }
+
+    function pointerDistance() {
+      const arr = [...state.sim.pointers.values()];
+      if (arr.length < 2) return null;
+      return Math.hypot(arr[0].x - arr[1].x, arr[0].y - arr[1].y);
+    }
+
+    function setOverview(on) {
+      state.sim.overview = on;
+      if (on) state.sim.followPhone = false;
+      updateSimButtons();
+    }
+
+    function updateSimButtons() {
+      $('followBtn').classList.toggle('on', state.sim.followPhone && !state.sim.overview);
+      $('followBtn').textContent = state.sim.followPhone && !state.sim.overview ? '跟随手机' : '手动视角';
+      $('overviewBtn').classList.toggle('on', state.sim.overview);
+      $('overviewBtn').textContent = state.sim.overview ? '全景中' : '全景';
+      $('viewModeText').textContent = state.sim.overview ? '全景：可查看全天路径' : (state.sim.followPhone ? '第一人称：跟随手机朝向' : '第一人称：手动拖动视角');
+    }
+
+    function renderSim(now) {
+      requestAnimationFrame(renderSim);
+      if (!state.sim.renderer) return;
+      const dt = Math.min(.05, (now - state.sim.lastFrame) / 1000 || .016);
+      state.sim.lastFrame = now;
+      if (state.sim.playing) {
+        state.sim.hour = mod(state.sim.hour + dt * 1.2, 24);
+        $('timeSlider').value = state.sim.hour;
+      }
+      updateSimCamera();
+      updateSimSunAndFocus();
+      state.sim.renderer.render(state.sim.scene, state.sim.camera);
+    }
+
+    function updateSimCamera() {
+      const cam = state.sim.camera;
+      if (!cam) return;
+      if (state.sim.overview) {
+        const az = state.sim.manualAz * DEG;
+        const alt = clamp(state.sim.manualAlt, 20, 78) * DEG;
+        const dist = state.sim.distance;
+        cam.position.set(Math.sin(az) * Math.cos(alt) * dist, Math.sin(alt) * dist, -Math.cos(az) * Math.cos(alt) * dist);
+        cam.lookAt(0, 8, 0);
+        cam.fov = 58;
+        cam.updateProjectionMatrix();
+      } else {
+        cam.position.set(0, 2, 0);
+        let az = state.sim.manualAz;
+        let alt = state.sim.manualAlt;
+        if (state.sim.followPhone && Number.isFinite(state.azimuth) && Number.isFinite(state.altitude)) {
+          az = state.azimuth;
+          alt = clamp(state.altitude, -35, 82);
+        }
+        const p = vectorFromAzAlt(az, alt, 10);
+        cam.lookAt(p.x, p.y + 2, p.z);
+        cam.fov = 66;
+        cam.updateProjectionMatrix();
+      }
+    }
+
+    function updateSimSunAndFocus() {
+      const s = referenceSunPosition(state.sim.hour);
+      if (state.sim.sunNow) {
+        const p = vectorFromAzAlt(s.azimuth, s.altitude, 51);
+        state.sim.sunNow.position.set(p.x, p.y, p.z);
+      }
+      $('simTimeText').textContent = hourText(state.sim.hour);
+
+      let viewAz = state.sim.manualAz, viewAlt = state.sim.manualAlt;
+      if (!state.sim.overview && state.sim.followPhone && Number.isFinite(state.azimuth)) {
+        viewAz = state.azimuth; viewAlt = state.altitude;
+      }
+
+      let nearest = null;
+      let nearestDist = Infinity;
+      state.records.forEach(r => {
+        const sprite = state.sim.sprites.get(r.id);
+        if (!sprite) return;
+        let scale = sprite.userData.baseScale || 4.8;
+        const angle = angularDistance({ azimuth: viewAz, altitude: viewAlt }, { azimuth: r.azimuth, altitude: r.altitude });
+        const timeDist = Math.abs(hourOfRecord(r) - state.sim.hour);
+        const wrapTimeDist = Math.min(timeDist, 24 - timeDist);
+        if (!state.sim.overview && angle < 12) {
+          scale = 9.5;
+          if (angle < nearestDist) { nearest = r; nearestDist = angle; }
+        } else if (state.sim.overview && wrapTimeDist < .18) {
+          scale = 8;
+          nearest = nearest || r;
+        }
+        sprite.scale.set(scale, scale, 1);
+      });
+      state.sim.nearest = nearest;
+      const ref = `${hourText(state.sim.hour)} 参考太阳：${Math.round(s.azimuth)}°，${directionPhrase(s.azimuth)}，高度角 ${round1(s.altitude).toFixed(1)}°。`;
+      $('simInfo').textContent = state.sim.overview ? `${ref} 双指放大或点“跟随手机”回到第一人称。` : `${ref} 转动手机，镜头附近如有记录会自动放大。`;
+      const badge = $('focusBadge');
+      if (nearest) {
+        badge.textContent = `正在突出：第 ${nearest.seq} 次，${formatTime(nearest.timeISO)}，${nearest.direction}，高度角 ${nearest.altitude.toFixed(1)}°。`;
+        badge.classList.add('show');
+      } else {
+        badge.classList.remove('show');
+      }
+    }
+
+    function hourText(h) {
+      h = mod(h, 24);
+      const hh = Math.floor(h);
+      const mm = Math.floor((h - hh) * 60);
+      return `${two(hh)}:${two(mm)}`;
+    }
+
+    function switchPage(page) {
+      state.activePage = page;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      $(`page-${page}`).classList.add('active');
+      document.querySelectorAll('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+      if (page === 'sim') {
+        setTimeout(() => { resizeSim(); buildSimScene(); }, 50);
+      }
+    }
+
+    function bindEvents() {
+      $('startCameraBtn').addEventListener('click', startCamera);
+      $('startSensorBtn').addEventListener('click', startSensor);
+      $('captureBtn').addEventListener('click', captureRecord);
+      $('demoQuickBtn').addEventListener('click', generateDemoData);
+      $('locationQuickBtn').addEventListener('click', locate);
+      $('openIntroBtn').addEventListener('click', () => showIntro(true));
+      $('introStartBtn').addEventListener('click', hideIntro);
+      $('introLocBtn').addEventListener('click', locate);
+      $('showIntroAgainBtn').addEventListener('click', () => showIntro(true));
+      $('groupNameInput').addEventListener('change', saveSettings);
+      $('placeNameInput').addEventListener('change', saveSettings);
+      $('locateBtn').addEventListener('click', locate);
+      $('saveAllJsonBtn').addEventListener('click', exportJSON);
+      $('exportJsonBtn').addEventListener('click', exportJSON);
+      $('exportCsvBtn').addEventListener('click', exportCSV);
+      $('deleteCloseBtn').addEventListener('click', deleteCloseRecords);
+      $('clearAllBtn').addEventListener('click', async () => {
+        if (confirm('确定清空所有记录吗？')) await clearRecords();
+      });
+      $('importFileInput').addEventListener('change', (e) => importFile(e.target.files[0]));
+      document.querySelectorAll('.dock-btn').forEach(btn => btn.addEventListener('click', () => switchPage(btn.dataset.page)));
+      $('playBtn').addEventListener('click', () => {
+        state.sim.playing = !state.sim.playing;
+        $('playBtn').textContent = state.sim.playing ? '暂停播放' : '播放 24 小时';
+        $('playBtn').classList.toggle('active', state.sim.playing);
+      });
+      $('timeSlider').addEventListener('input', (e) => { state.sim.hour = Number(e.target.value); state.sim.playing = false; $('playBtn').textContent = '播放 24 小时'; $('playBtn').classList.remove('active'); });
+      $('rebuildSceneBtn').addEventListener('click', buildSimScene);
+      $('makeDemoBtn').addEventListener('click', generateDemoData);
+      $('overviewBtn').addEventListener('click', () => setOverview(!state.sim.overview));
+      $('followBtn').addEventListener('click', () => {
+        state.sim.followPhone = true;
+        state.sim.overview = false;
+        updateSimButtons();
+      });
+    }
+
+    async function init() {
+      bindEvents();
+      loadSettings();
+      updateStatusButtons();
+      updateLiveReadout();
+      await loadRecords();
+      initSim();
+      showIntro(false);
+      if (!window.isSecureContext) showToast('提示：摄像头和传感器通常需要 HTTPS 安全环境。', 4200);
+    }
+
+    init();
+  </script>
+</body>
+</html>
